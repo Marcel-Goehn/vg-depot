@@ -29,22 +29,22 @@ The merchants' customers will be able to browse products, use a cart and checkou
 ## Architecture and Stack
 
 - **Modular monolith** (modules: catalog, inventory, orders, invoicing, shipping, payments, storefront/pages, integrations/marketplaces), no microservices. Module boundaries should be enforced (e.g. Spring Modulith or ArchUnit)
-- **Backend** (fixed, will not be changed): Kotlin with Spring Boot, Spring Security OAuth2 Resource Server, Spring Data JDBC, HikariCP. Native SQL (`@Query` / `JdbcTemplate`) for complex queries such as stock ledger aggregations. REST API with an OpenAPI spec as the contract (e.g. springdoc), webhooks, Postgres-based background job queue (e.g. JobRunr or db-scheduler). Database migrations as plain SQL with Flyway
-- **RLS handling with Spring Data JDBC**: the tenant must be set at the start of every transaction (e.g. via a custom transaction manager or `DataSource` wrapper that executes `set_config('app.tenant_id', ..., true)`), never via a plain `ThreadLocal` that can leak or get lost across threads, virtual threads, async calls or background jobs. Background jobs must carry the tenant explicitly. Please propose a robust design and describe pitfalls specific to Spring Data JDBC (aggregate boundaries, repositories, no accidental queries outside a tenant-bound transaction)
+- **Backend** (fixed, will not be changed): Kotlin with Spring Boot, Spring Security OAuth2 Resource Server, Spring Data JPA (Hibernate), HikariCP. Native SQL (`@Query` / `JdbcTemplate`) for complex queries such as stock ledger aggregations. REST API with an OpenAPI spec as the contract (e.g. springdoc), webhooks, Postgres-based background job queue (e.g. JobRunr or db-scheduler). Database migrations as plain SQL with Flyway
+- **RLS handling with Spring Data JPA**: the tenant must be set at the start of every transaction (e.g. via a custom transaction manager or `DataSource` wrapper that executes `set_config('app.tenant_id', ..., true)`), never via a plain `ThreadLocal` that can leak or get lost across threads, virtual threads, async calls or background jobs. Background jobs must carry the tenant explicitly. Please propose a robust design and describe pitfalls specific to Spring Data JPA / Hibernate (first-level cache and entity lifecycle, lazy loading and Open Session in View, repositories, no accidental queries outside a tenant-bound transaction)
 - **Marketplace abstraction**: a common interface (listing publish/update/end, order import, stock sync, category and attribute mapping, error and rate-limit handling), with eBay as the first adapter. Please propose the interface design
 - **Storefront**: Next.js (SSR, self-hosted via `output: 'standalone'`, shared cache handler such as Redis for multiple instances), TypeScript. The tenant is resolved from the `Host` header (subdomain). Business logic lives only in the backend, not in Next.js
 - **Admin app**: Vite + React SPA with TanStack Router/Query (no SSR needed)
-- **UI and styling (strict rule)**: TailwindCSS plus shadcn/ui is the only allowed UI foundation, in the admin app and in the shared `packages/blocks` storefront components.
+- **UI and styling (strict rule)**: TailwindCSS plus shadcn/ui is the only allowed UI foundation, in the admin app and in the storefront block components.
   - Always use existing shadcn/ui components and their documented patterns.
   - Never build custom UI components or custom-styled replacements where a shadcn/ui component or composition of shadcn/ui components exists.
   - Storefront blocks (hero, product grid, footer, etc.) must be composed exclusively from shadcn/ui components and Tailwind utility classes.
   - If something seems impossible with shadcn/ui, flag it explicitly and ask me instead of building a custom solution
 - **Page builder**: Puck. Pages are stored as a JSON component tree and rendered by the storefront with the same shared block components used in the editor
 - **Theming**: per-tenant design tokens stored as CSS variables (colors, fonts, spacing), using the shadcn/ui theming variables, referenced by Tailwind via `@theme` and written server-side into a `<style>` tag to avoid flicker. Runtime customer changes must never be stored as Tailwind classes. No arbitrary custom JS/CSS from tenants in the MVP (XSS risk)
-- **Monorepo** (npm):
-  - `frontend/vgdepot-shopfront`
-  - `frontend/vgdepot-admin`
-  - `backend`
+- **Monorepo** (one Git repository, no npm workspaces; each app is an independent project with its own dependencies and lockfile):
+  - `frontend/vgdepot-shopfront` (npm; also contains the Puck storefront block components)
+  - `frontend/vgdepot-admin` (npm)
+  - `backend` (Gradle)
 
 ## Authentication and Authorization
 
